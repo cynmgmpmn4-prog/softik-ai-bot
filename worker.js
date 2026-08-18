@@ -62,9 +62,11 @@ const SYSTEM_PROMPT = `
 - людей и событий, которые могли измениться;
 - любой информации после твоего базового периода знаний;
 
-используй интернет-поиск, если он доступен.
+используй веб-поиск, если он доступен.
 
-Если интернет-поиск использовался, не выдавай устаревшую информацию за актуальную.
+Если веб-поиск был использован, опирайся на найденные источники и не выдавай старую информацию за актуальную.
+
+При использовании найденной информации указывай источники в конце ответа.
 
 ПАМЯТЬ
 
@@ -95,6 +97,7 @@ const SYSTEM_PROMPT = `
 
 const MAX_MESSAGES = 20;
 const MAX_MEMORIES = 50;
+const MAX_SEARCH_RESULTS = 5;
 
 
 // ======================================================
@@ -240,7 +243,7 @@ ${memories.map(memory => `- ${memory}`).join("\n")}
 
 
       // ==================================================
-      // SPECIAL COMMAND ROUTING
+      // SPECIAL COMMANDS
       // ==================================================
 
       if (userMessage.startsWith("/fix ")) {
@@ -300,7 +303,7 @@ ${text}`
 
 
       // ==================================================
-      // FORCE SEARCH
+      // SEARCH
       // ==================================================
 
       let forceSearch = false;
@@ -315,25 +318,72 @@ ${text}`
 
 
       // ==================================================
-      // MAIN AI ROUTER
+      // AUTOMATIC SEARCH DECISION
       // ==================================================
+
+      let shouldSearch = forceSearch;
+
+      if (!forceSearch) {
+
+        shouldSearch =
+          needsWebSearch(actualMessage);
+
+      }
+
 
       console.log(
         "Softik task:",
-        forceSearch ? "search" : "chat"
+        shouldSearch ? "web-search" : "chat"
       );
+
+
+      // ==================================================
+      // TAVILY SEARCH
+      // ==================================================
+
+      let searchContext = "";
+
+      if (shouldSearch) {
+
+        searchContext =
+          await performTavilySearch(
+            env,
+            actualMessage
+          );
+
+        if (searchContext) {
+
+          console.log(
+            "Tavily search successful"
+          );
+
+        } else {
+
+          console.log(
+            "Tavily search unavailable"
+          );
+
+        }
+      }
+
+
+      // ==================================================
+      // MAIN AI ROUTER
+      // ======================================================
+
+      let answer = null;
 
 
       // --------------------------------------------------
       // 1. GEMINI
       // --------------------------------------------------
 
-      let answer = await askGemini(
+      answer = await askGemini(
         env,
         actualMessage,
         history,
         memoryContext,
-        forceSearch
+        searchContext
       );
 
 
@@ -349,41 +399,66 @@ ${text}`
           env,
           actualMessage,
           history,
-          memoryContext
+          memoryContext,
+          searchContext
         );
       }
 
 
       // --------------------------------------------------
-      // 3. CLOUDFLARE WORKERS AI
+      // 3. MISTRAL
+      // --------------------------------------------------
+
+      if (!answer) {
+
+        console.log("Trying Mistral...");
+
+        answer = await askMistralChat(
+          env,
+          actualMessage,
+          history,
+          memoryContext,
+          searchContext
+        );
+      }
+
+
+      // --------------------------------------------------
+      // 4. CLOUDFLARE AI
       // --------------------------------------------------
 
       if (!answer && env.AI) {
 
-        console.log("Trying Cloudflare Workers AI...");
+        console.log(
+          "Trying Cloudflare Workers AI..."
+        );
 
         answer = await askCloudflareAI(
           env,
           actualMessage,
           history,
-          memoryContext
+          memoryContext,
+          searchContext
         );
       }
 
 
       // --------------------------------------------------
-      // 4. OPENROUTER
+      // 5. OPENROUTER
       // --------------------------------------------------
 
       if (!answer) {
 
-        console.log("Trying OpenRouter...");
+        console.log(
+          "Trying OpenRouter..."
+        );
 
         answer = await askOpenRouter(
           env,
           actualMessage,
           history,
-          memoryContext
+          memoryContext,
+          searchContext
         );
       }
 
@@ -466,6 +541,235 @@ ${text}`
 
 
 // ======================================================
+// AUTOMATIC WEB SEARCH DETECTION
+// ======================================================
+
+function needsWebSearch(message) {
+
+  const text = message.toLowerCase();
+
+  const patterns = [
+
+    // Current information
+    "сейчас",
+    "сегодня",
+    "сегодняшн",
+    "завтра",
+    "вчера",
+    "на данный момент",
+    "актуальн",
+    "последн",
+    "свеж",
+    "новост",
+    "что нового",
+
+    // Weather
+    "погод",
+    "температур",
+    "осадк",
+    "дождь",
+    "снег",
+    "ветер",
+
+    // Prices / availability
+    "цена",
+    "стоимость",
+    "сколько стоит",
+    "где купить",
+    "купить",
+    "в наличии",
+    "доступен",
+    "доступна",
+    "распродаж",
+
+    // Current products / software
+    "новая модель",
+    "последняя модель",
+    "последняя версия",
+    "новая версия",
+    "обновление",
+    "релиз",
+    "вышел",
+    "вышла",
+
+    // Events
+    "когда будет",
+    "когда состоится",
+    "расписание",
+    "ближайший",
+    "ближайшая",
+    "матч",
+    "концерт",
+
+    // Explicit research intent
+    "найди",
+    "поищи",
+    "проверь в интернете",
+    "посмотри в интернете",
+    "что пишут в интернете",
+    "источники",
+    "ссылки",
+
+    // People / companies
+    "кто сейчас",
+    "где сейчас",
+    "что случилось",
+    "что произошло",
+
+    // Laws / rules
+    "закон",
+    "законы",
+    "правила",
+    "официально",
+    "официальный сайт",
+
+    // Shopping
+    "обзор",
+    "отзывы",
+    "сравни модели",
+    "лучший",
+    "лучшие"
+  ];
+
+  return patterns.some(
+    pattern => text.includes(pattern)
+  );
+}
+
+
+// ======================================================
+// TAVILY SEARCH
+// ======================================================
+
+async function performTavilySearch(
+  env,
+  query
+) {
+
+  if (!env.TAVILY_API_KEY) {
+
+    console.error(
+      "Tavily: API key missing"
+    );
+
+    return "";
+  }
+
+
+  try {
+
+    const response = await fetch(
+      "https://api.tavily.com/search",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization":
+            `Bearer ${env.TAVILY_API_KEY}`
+        },
+
+        body: JSON.stringify({
+
+          query,
+
+          search_depth:
+            "basic",
+
+          topic:
+            "general",
+
+          max_results:
+            MAX_SEARCH_RESULTS,
+
+          include_answer:
+            false,
+
+          include_raw_content:
+            false,
+
+          include_images:
+            false
+
+        })
+      }
+    );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      console.error(
+        "Tavily error:",
+        JSON.stringify(data)
+      );
+
+      return "";
+    }
+
+
+    if (
+      !Array.isArray(
+        data.results
+      ) ||
+      data.results.length === 0
+    ) {
+
+      console.log(
+        "Tavily returned no results"
+      );
+
+      return "";
+    }
+
+
+    let context = `
+РЕЗУЛЬТАТЫ ВЕБ-ПОИСКА TAVILY
+
+Используй эти результаты как актуальные внешние источники.
+Не придумывай сведения, которых нет в найденных материалах.
+
+`;
+
+
+    data.results.forEach(
+      (result, index) => {
+
+        context += `
+ИСТОЧНИК ${index + 1}
+Название: ${result.title || "Без названия"}
+URL: ${result.url || ""}
+Содержание:
+${result.content || ""}
+
+`;
+      }
+    );
+
+
+    context += `
+КОНЕЦ РЕЗУЛЬТАТОВ ПОИСКА
+`;
+
+
+    return context.trim();
+
+  } catch (error) {
+
+    console.error(
+      "Tavily exception:",
+      error
+    );
+
+    return "";
+  }
+}
+
+
+// ======================================================
 // GEMINI
 // ======================================================
 
@@ -474,30 +778,41 @@ async function askGemini(
   userMessage,
   history,
   memoryContext,
-  forceSearch
+  searchContext
 ) {
+
   if (!env.GEMINI_API_KEY) {
-    console.error("Gemini: API key missing");
+
+    console.error(
+      "Gemini: API key missing"
+    );
+
     return null;
   }
 
+
   try {
-    // Собираем историю в один понятный контекст.
+
     let conversation = "";
 
     for (const message of history) {
+
       const role =
         message.role === "assistant"
           ? "Софтик"
           : "Пользователь";
 
-      conversation += `${role}: ${message.content}\n`;
+      conversation +=
+        `${role}: ${message.content}\n`;
     }
+
 
     const input = `
 ${SYSTEM_PROMPT}
 
 ${memoryContext}
+
+${searchContext}
 
 ИСТОРИЯ ДИАЛОГА:
 ${conversation || "Истории пока нет."}
@@ -505,86 +820,86 @@ ${conversation || "Истории пока нет."}
 ПОСЛЕДНЕЕ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ:
 ${userMessage}
 
-${forceSearch
-  ? "ОБЯЗАТЕЛЬНО используй Google Search и найди актуальную информацию в интернете."
-  : "Если вопрос требует актуальной информации, самостоятельно используй Google Search."}
+${
+  searchContext
+    ? `
+Для ответа используй результаты веб-поиска выше.
+
+Если информация противоречит твоим внутренним знаниям,
+отдавай приоритет свежим найденным источникам.
+
+В конце ответа добавь раздел:
+
+🔗 Источники:
+- название источника — URL
+`
+    : ""
+}
 `;
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/interactions",
-      {
-        method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GEMINI_API_KEY
-        },
+    const response =
+      await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        {
+          method: "POST",
 
-        body: JSON.stringify({
-          model: "gemini-3.6-flash",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-          input,
+            "x-goog-api-key":
+              env.GEMINI_API_KEY
+          },
 
-          tools: [
-            {
-              type: "google_search"
+          body: JSON.stringify({
+
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: input
+                  }
+                ]
+              }
+            ],
+
+            generationConfig: {
+              maxOutputTokens:
+                4096
             }
-          ]
-        })
-      }
-    );
 
-    const data = await response.json();
+          })
+        }
+      );
 
-  if (!response.ok) {
-  console.error(
-    "GEMINI SEARCH ERROR:",
-    JSON.stringify({
-      status: response.status,
-      statusText: response.statusText,
-      data
-    })
-  );
 
-  return null;
-}
+    const data =
+      await response.json();
 
-    // Новый Interactions API возвращает output.
-    // Берём текстовый результат.
-    let answer = "";
 
-    if (typeof data.output_text === "string") {
-      answer = data.output_text;
+    if (!response.ok) {
+
+      console.error(
+        "Gemini error:",
+        JSON.stringify(data)
+      );
+
+      return null;
     }
 
-    if (!answer && Array.isArray(data.output)) {
-      for (const item of data.output) {
-        if (
-          item &&
-          typeof item.text === "string"
-        ) {
-          answer += item.text;
-        }
 
-        if (
-          item &&
-          Array.isArray(item.content)
-        ) {
-          for (const content of item.content) {
-            if (
-              content &&
-              typeof content.text === "string"
-            ) {
-              answer += content.text;
-            }
-          }
-        }
-      }
-    }
+    const answer =
+      data.candidates?.[0]
+        ?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
 
-    answer = answer.trim();
 
     if (!answer) {
+
       console.error(
         "Gemini returned empty answer:",
         JSON.stringify(data)
@@ -593,14 +908,11 @@ ${forceSearch
       return null;
     }
 
-    console.log(
-      "Gemini success. Search enabled:",
-      true
-    );
 
     return answer;
 
   } catch (error) {
+
     console.error(
       "Gemini exception:",
       error
@@ -619,7 +931,8 @@ async function askGroq(
   env,
   userMessage,
   history,
-  memoryContext
+  memoryContext,
+  searchContext
 ) {
 
   if (!env.GROQ_API_KEY) {
@@ -635,11 +948,13 @@ async function askGroq(
   try {
 
     const messages = [
+
       {
         role: "system",
         content:
           SYSTEM_PROMPT +
-          memoryContext
+          memoryContext +
+          searchContext
       },
 
       ...history,
@@ -648,34 +963,41 @@ async function askGroq(
         role: "user",
         content: userMessage
       }
+
     ];
 
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization":
-            `Bearer ${env.GROQ_API_KEY}`
-        },
+          headers: {
+            "Content-Type":
+              "application/json",
 
-        body: JSON.stringify({
+            "Authorization":
+              `Bearer ${env.GROQ_API_KEY}`
+          },
 
-          model:
-            "openai/gpt-oss-20b",
+          body: JSON.stringify({
 
-          messages,
+            model:
+              "openai/gpt-oss-20b",
 
-          max_tokens: 4096
-        })
-      }
-    );
+            messages,
+
+            max_tokens:
+              4096
+
+          })
+        }
+      );
 
 
-    const data = await response.json();
+    const data =
+      await response.json();
 
 
     if (!response.ok) {
@@ -690,7 +1012,8 @@ async function askGroq(
 
 
     return (
-      data.choices?.[0]?.message?.content ||
+      data.choices?.[0]
+        ?.message?.content ||
       ""
     ).trim();
 
@@ -707,7 +1030,113 @@ async function askGroq(
 
 
 // ======================================================
-// MISTRAL
+// MISTRAL CHAT
+// ======================================================
+
+async function askMistralChat(
+  env,
+  userMessage,
+  history,
+  memoryContext,
+  searchContext
+) {
+
+  if (!env.MISTRAL_API_KEY) {
+
+    console.error(
+      "Mistral: API key missing"
+    );
+
+    return null;
+  }
+
+
+  try {
+
+    const messages = [
+
+      {
+        role: "system",
+        content:
+          SYSTEM_PROMPT +
+          memoryContext +
+          searchContext
+      },
+
+      ...history,
+
+      {
+        role: "user",
+        content: userMessage
+      }
+
+    ];
+
+
+    const response =
+      await fetch(
+        "https://api.mistral.ai/v1/chat/completions",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "Authorization":
+              `Bearer ${env.MISTRAL_API_KEY}`
+          },
+
+          body: JSON.stringify({
+
+            model:
+              "mistral-small-latest",
+
+            messages,
+
+            max_tokens:
+              4096
+
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      console.error(
+        "Mistral error:",
+        JSON.stringify(data)
+      );
+
+      return null;
+    }
+
+
+    return (
+      data.choices?.[0]
+        ?.message?.content ||
+      ""
+    ).trim();
+
+  } catch (error) {
+
+    console.error(
+      "Mistral exception:",
+      error
+    );
+
+    return null;
+  }
+}
+
+
+// ======================================================
+// MISTRAL SIMPLE PROMPT
 // ======================================================
 
 async function askMistral(
@@ -727,36 +1156,42 @@ async function askMistral(
 
   try {
 
-    const response = await fetch(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        "https://api.mistral.ai/v1/chat/completions",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization":
-            `Bearer ${env.MISTRAL_API_KEY}`
-        },
+          headers: {
+            "Content-Type":
+              "application/json",
 
-        body: JSON.stringify({
+            "Authorization":
+              `Bearer ${env.MISTRAL_API_KEY}`
+          },
 
-          model:
-            "mistral-small-latest",
+          body: JSON.stringify({
 
-          messages: [
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
+            model:
+              "mistral-small-latest",
 
-          max_tokens: 4096
-        })
-      }
-    );
+            messages: [
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+
+            max_tokens:
+              4096
+
+          })
+        }
+      );
 
 
-    const data = await response.json();
+    const data =
+      await response.json();
 
 
     if (!response.ok) {
@@ -771,7 +1206,8 @@ async function askMistral(
 
 
     return (
-      data.choices?.[0]?.message?.content ||
+      data.choices?.[0]
+        ?.message?.content ||
       ""
     ).trim();
 
@@ -795,7 +1231,8 @@ async function askCloudflareAI(
   env,
   userMessage,
   history,
-  memoryContext
+  memoryContext,
+  searchContext
 ) {
 
   if (!env.AI) {
@@ -811,11 +1248,13 @@ async function askCloudflareAI(
   try {
 
     const messages = [
+
       {
         role: "system",
         content:
           SYSTEM_PROMPT +
-          memoryContext
+          memoryContext +
+          searchContext
       },
 
       ...history,
@@ -824,15 +1263,17 @@ async function askCloudflareAI(
         role: "user",
         content: userMessage
       }
+
     ];
 
 
-    const result = await env.AI.run(
-      "@cf/meta/llama-3.1-8b-instruct-fast",
-      {
-        messages
-      }
-    );
+    const result =
+      await env.AI.run(
+        "@cf/meta/llama-3.1-8b-instruct-fast",
+        {
+          messages
+        }
+      );
 
 
     const answer =
@@ -863,7 +1304,8 @@ async function askOpenRouter(
   env,
   userMessage,
   history,
-  memoryContext
+  memoryContext,
+  searchContext
 ) {
 
   if (!env.OPENROUTER_API_KEY) {
@@ -879,11 +1321,13 @@ async function askOpenRouter(
   try {
 
     const messages = [
+
       {
         role: "system",
         content:
           SYSTEM_PROMPT +
-          memoryContext
+          memoryContext +
+          searchContext
       },
 
       ...history,
@@ -892,40 +1336,44 @@ async function askOpenRouter(
         role: "user",
         content: userMessage
       }
+
     ];
 
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
+          headers: {
+            "Content-Type":
+              "application/json",
 
-          "Authorization":
-            `Bearer ${env.OPENROUTER_API_KEY}`,
+            "Authorization":
+              `Bearer ${env.OPENROUTER_API_KEY}`,
 
-          "HTTP-Referer":
-            "https://softikaibot.fv4prnpg42.workers.dev",
+            "HTTP-Referer":
+              "https://softikaibot.fv4prnpg42.workers.dev",
 
-          "X-Title":
-            "Softik AI Bot"
-        },
+            "X-Title":
+              "Softik AI Bot"
+          },
 
-        body: JSON.stringify({
+          body: JSON.stringify({
 
-          model:
-            "openrouter/free",
+            model:
+              "openrouter/free",
 
-          messages
+            messages
 
-        })
-      }
-    );
+          })
+        }
+      );
 
 
-    const data = await response.json();
+    const data =
+      await response.json();
 
 
     if (!response.ok) {
@@ -940,7 +1388,8 @@ async function askOpenRouter(
 
 
     return (
-      data.choices?.[0]?.message?.content ||
+      data.choices?.[0]
+        ?.message?.content ||
       ""
     ).trim();
 
@@ -1039,34 +1488,34 @@ async function updateMemory(
 []
 
 Текущая память:
-${memories.length > 0
-  ? memories.join("\n")
-  : "пусто"}
+${
+  memories.length > 0
+    ? memories.join("\n")
+    : "пусто"
+}
 
 Сообщение:
 ${userMessage}
 `;
 
 
-    let result = null;
+    let result =
+      await askMistral(
+        env,
+        instruction
+      );
 
 
-    // Сначала Mistral
-    result = await askMistral(
-      env,
-      instruction
-    );
-
-
-    // Если Mistral недоступен — Groq
     if (!result) {
 
-      result = await askGroq(
-        env,
-        instruction,
-        [],
-        ""
-      );
+      result =
+        await askGroq(
+          env,
+          instruction,
+          [],
+          "",
+          ""
+        );
 
     }
 
@@ -1155,201 +1604,313 @@ async function checkModels(env) {
   ];
 
 
-  // Gemini
-  try {
+  // ====================================================
+  // GEMINI
+  // ====================================================
 
-    const response =
-      await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-        {
-          method: "POST",
+  if (!env.GEMINI_API_KEY) {
 
-          headers: {
-            "Content-Type":
-              "application/json",
+    result.push(
+      "🔴 Gemini — API ключ отсутствует"
+    );
 
-            "x-goog-api-key":
-              env.GEMINI_API_KEY
-          },
+  } else {
 
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  {
-                    text: "Ответь одним словом: OK"
-                  }
-                ]
+    try {
+
+      const response =
+        await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "x-goog-api-key":
+                env.GEMINI_API_KEY
+            },
+
+            body: JSON.stringify({
+
+              contents: [
+                {
+                  role: "user",
+                  parts: [
+                    {
+                      text:
+                        "Ответь одним словом: OK"
+                    }
+                  ]
+                }
+              ],
+
+              generationConfig: {
+                maxOutputTokens: 10
               }
-            ],
 
-            generationConfig: {
-              maxOutputTokens: 10
-            }
-          })
-        }
-      );
+            })
+          }
+        );
 
 
-    const data =
-      await response.json();
+      const data =
+        await response.json();
 
 
-    result.push(
-      response.ok
-        ? "🟢 Gemini 3.6 Flash — работает"
-        : `🔴 Gemini — ошибка ${response.status}`
-    );
+      if (response.ok) {
+
+        result.push(
+          "🟢 Gemini 3.6 Flash — работает"
+        );
+
+      } else if (
+        response.status === 429
+      ) {
+
+        result.push(
+          "🟡 Gemini 3.6 Flash — квота/лимит исчерпан"
+        );
+
+      } else if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+
+        result.push(
+          `🔴 Gemini — ошибка доступа ${response.status}`
+        );
+
+      } else {
+
+        result.push(
+          `🔴 Gemini — ошибка ${response.status}`
+        );
+
+      }
 
 
-    if (!response.ok) {
-      console.error(
-        "Gemini check:",
-        JSON.stringify(data)
-      );
-    }
+      if (!response.ok) {
 
-  } catch {
+        console.error(
+          "Gemini check:",
+          JSON.stringify(data)
+        );
 
-    result.push(
-      "🔴 Gemini — ошибка соединения"
-    );
+      }
 
-  }
+    } catch {
 
-
-  // Groq
-  try {
-
-    const response =
-      await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "Authorization":
-              `Bearer ${env.GROQ_API_KEY}`
-          },
-
-          body: JSON.stringify({
-
-            model:
-              "openai/gpt-oss-20b",
-
-            messages: [
-              {
-                role: "user",
-                content: "Ответь одним словом: OK"
-              }
-            ],
-
-            max_tokens: 10
-
-          })
-        }
-      );
-
-
-    const data =
-      await response.json();
-
-
-    result.push(
-      response.ok
-        ? "🟢 Groq GPT-OSS 20B — работает"
-        : `🔴 Groq — ошибка ${response.status}`
-    );
-
-
-    if (!response.ok) {
-
-      console.error(
-        "Groq check:",
-        JSON.stringify(data)
+      result.push(
+        "🔴 Gemini — ошибка соединения"
       );
 
     }
-
-  } catch {
-
-    result.push(
-      "🔴 Groq — ошибка соединения"
-    );
-
   }
 
 
-  // Mistral
-  try {
+  // ====================================================
+  // GROQ
+  // ====================================================
 
-    const response =
-      await fetch(
-        "https://api.mistral.ai/v1/chat/completions",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            "Authorization":
-              `Bearer ${env.MISTRAL_API_KEY}`
-          },
-
-          body: JSON.stringify({
-
-            model:
-              "mistral-small-latest",
-
-            messages: [
-              {
-                role: "user",
-                content: "Ответь одним словом: OK"
-              }
-            ],
-
-            max_tokens: 10
-
-          })
-        }
-      );
-
-
-    const data =
-      await response.json();
-
+  if (!env.GROQ_API_KEY) {
 
     result.push(
-      response.ok
-        ? "🟢 Mistral — работает"
-        : `🔴 Mistral — ошибка ${response.status}`
+      "🔴 Groq — API ключ отсутствует"
     );
 
+  } else {
 
-    if (!response.ok) {
+    try {
 
-      console.error(
-        "Mistral check:",
-        JSON.stringify(data)
+      const response =
+        await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "Authorization":
+                `Bearer ${env.GROQ_API_KEY}`
+            },
+
+            body: JSON.stringify({
+
+              model:
+                "openai/gpt-oss-20b",
+
+              messages: [
+                {
+                  role: "user",
+                  content:
+                    "Ответь одним словом: OK"
+                }
+              ],
+
+              max_tokens: 10
+
+            })
+          }
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (response.ok) {
+
+        result.push(
+          "🟢 Groq GPT-OSS 20B — работает"
+        );
+
+      } else if (
+        response.status === 429
+      ) {
+
+        result.push(
+          "🟡 Groq — лимит запросов"
+        );
+
+      } else if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+
+        result.push(
+          `🔴 Groq — ошибка доступа ${response.status}`
+        );
+
+      } else {
+
+        result.push(
+          `🔴 Groq — ошибка ${response.status}`
+        );
+
+      }
+
+
+      if (!response.ok) {
+
+        console.error(
+          "Groq check:",
+          JSON.stringify(data)
+        );
+
+      }
+
+    } catch {
+
+      result.push(
+        "🔴 Groq — ошибка соединения"
       );
 
     }
-
-  } catch {
-
-    result.push(
-      "🔴 Mistral — ошибка соединения"
-    );
-
   }
 
 
-  // Cloudflare AI
+  // ====================================================
+  // MISTRAL
+  // ====================================================
+
+  if (!env.MISTRAL_API_KEY) {
+
+    result.push(
+      "🔴 Mistral — API ключ отсутствует"
+    );
+
+  } else {
+
+    try {
+
+      const response =
+        await fetch(
+          "https://api.mistral.ai/v1/chat/completions",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "Authorization":
+                `Bearer ${env.MISTRAL_API_KEY}`
+            },
+
+            body: JSON.stringify({
+
+              model:
+                "mistral-small-latest",
+
+              messages: [
+                {
+                  role: "user",
+                  content:
+                    "Ответь одним словом: OK"
+                }
+              ],
+
+              max_tokens: 10
+
+            })
+          }
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (response.ok) {
+
+        result.push(
+          "🟢 Mistral — работает"
+        );
+
+      } else if (
+        response.status === 429
+      ) {
+
+        result.push(
+          "🟡 Mistral — лимит запросов"
+        );
+
+      } else {
+
+        result.push(
+          `🔴 Mistral — ошибка ${response.status}`
+        );
+
+      }
+
+
+      if (!response.ok) {
+
+        console.error(
+          "Mistral check:",
+          JSON.stringify(data)
+        );
+
+      }
+
+    } catch {
+
+      result.push(
+        "🔴 Mistral — ошибка соединения"
+      );
+
+    }
+  }
+
+
+  // ====================================================
+  // CLOUDFLARE AI
+  // ====================================================
+
   if (env.AI) {
 
     try {
@@ -1361,7 +1922,8 @@ async function checkModels(env) {
             messages: [
               {
                 role: "user",
-                content: "Ответь одним словом: OK"
+                content:
+                  "Ответь одним словом: OK"
               }
             ]
           }
@@ -1396,37 +1958,139 @@ async function checkModels(env) {
   }
 
 
-  // OpenRouter
-  try {
+  // ====================================================
+  // OPENROUTER
+  // ====================================================
 
-    if (!env.OPENROUTER_API_KEY) {
-
-      result.push(
-        "🟡 OpenRouter — ключ отсутствует"
-      );
-
-    } else {
-
-      result.push(
-        "🟡 OpenRouter — ключ подключён (лимит проверяется при запросе)"
-      );
-
-    }
-
-  } catch {
+  if (!env.OPENROUTER_API_KEY) {
 
     result.push(
-      "🔴 OpenRouter — ошибка"
+      "🔴 OpenRouter — ключ отсутствует"
+    );
+
+  } else {
+
+    result.push(
+      "🟡 OpenRouter — ключ подключён (лимит проверяется при запросе)"
     );
 
   }
 
 
+  // ====================================================
+  // TAVILY
+  // ====================================================
+
+  if (!env.TAVILY_API_KEY) {
+
+    result.push(
+      "🔴 Tavily — API ключ отсутствует"
+    );
+
+  } else {
+
+    try {
+
+      const response =
+        await fetch(
+          "https://api.tavily.com/search",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "Authorization":
+                `Bearer ${env.TAVILY_API_KEY}`
+            },
+
+            body: JSON.stringify({
+
+              query:
+                "Tavily API",
+
+              search_depth:
+                "basic",
+
+              max_results:
+                1,
+
+              include_answer:
+                false,
+
+              include_raw_content:
+                false,
+
+              include_images:
+                false
+
+            })
+          }
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (response.ok) {
+
+        result.push(
+          "🟢 Tavily Search — работает"
+        );
+
+      } else if (
+        response.status === 429
+      ) {
+
+        result.push(
+          "🟡 Tavily Search — лимит/квота исчерпаны"
+        );
+
+      } else if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+
+        result.push(
+          `🔴 Tavily — ошибка ключа/доступа ${response.status}`
+        );
+
+      } else {
+
+        result.push(
+          `🔴 Tavily — ошибка ${response.status}`
+        );
+
+      }
+
+
+      if (!response.ok) {
+
+        console.error(
+          "Tavily check:",
+          JSON.stringify(data)
+        );
+
+      }
+
+    } catch {
+
+      result.push(
+        "🔴 Tavily — ошибка соединения"
+      );
+
+    }
+  }
+
+
   result.push(
     "",
-    "🌐 Google Search подключён через Gemini.",
+    "🌐 Интернет: Tavily Search",
     "",
-    "Для принудительного поиска используй:",
+    "Автоматический поиск включён.",
+    "Для принудительного поиска:",
     "/search твой вопрос"
   );
 
@@ -1445,10 +2109,12 @@ async function sendTelegramMessage(
   text
 ) {
 
-  // Telegram ограничивает длину сообщения.
-  // Разбиваем длинные ответы.
-
   const MAX_LENGTH = 4000;
+
+  if (!text) {
+    return;
+  }
+
 
   for (
     let i = 0;
@@ -1474,8 +2140,11 @@ async function sendTelegramMessage(
         },
 
         body: JSON.stringify({
-          chat_id: chatId,
-          text: chunk
+          chat_id:
+            chatId,
+
+          text:
+            chunk
         })
       }
     );
