@@ -476,70 +476,42 @@ async function askGemini(
   memoryContext,
   forceSearch
 ) {
-
   if (!env.GEMINI_API_KEY) {
     console.error("Gemini: API key missing");
     return null;
   }
 
   try {
-
-    const contents = [];
+    // Собираем историю в один понятный контекст.
+    let conversation = "";
 
     for (const message of history) {
+      const role =
+        message.role === "assistant"
+          ? "Софтик"
+          : "Пользователь";
 
-      contents.push({
-        role:
-          message.role === "assistant"
-            ? "model"
-            : "user",
-
-        parts: [
-          {
-            text: message.content
-          }
-        ]
-      });
-
+      conversation += `${role}: ${message.content}\n`;
     }
 
-    contents.push({
-      role: "user",
-      parts: [
-        {
-          text:
-            SYSTEM_PROMPT +
-            memoryContext +
-            "\n\nПользователь:\n" +
-            userMessage
-        }
-      ]
-    });
+    const input = `
+${SYSTEM_PROMPT}
 
+${memoryContext}
 
-    const body = {
-      contents,
-      generationConfig: {
-        maxOutputTokens: 4096
-      }
-    };
+ИСТОРИЯ ДИАЛОГА:
+${conversation || "Истории пока нет."}
 
+ПОСЛЕДНЕЕ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ:
+${userMessage}
 
-    // Google Search
-    //
-    // Если команда /search — поиск включается принудительно.
-    // Для обычных сообщений Gemini сама может использовать
-    // Google Search, если он нужен.
-
-    body.tools = [
-      {
-        google_search: {}
-      }
-    ];
-
+${forceSearch
+  ? "ОБЯЗАТЕЛЬНО используй Google Search и найди актуальную информацию в интернете."
+  : "Если вопрос требует актуальной информации, самостоятельно используй Google Search."}
+`;
 
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
       {
         method: "POST",
 
@@ -548,16 +520,23 @@ async function askGemini(
           "x-goog-api-key": env.GEMINI_API_KEY
         },
 
-        body: JSON.stringify(body)
+        body: JSON.stringify({
+          model: "gemini-3.6-flash",
+
+          input,
+
+          tools: [
+            {
+              type: "google_search"
+            }
+          ]
+        })
       }
     );
 
-
     const data = await response.json();
 
-
     if (!response.ok) {
-
       console.error(
         "Gemini error:",
         JSON.stringify(data)
@@ -566,16 +545,42 @@ async function askGemini(
       return null;
     }
 
+    // Новый Interactions API возвращает output.
+    // Берём текстовый результат.
+    let answer = "";
 
-    const answer =
-      data.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
+    if (typeof data.output_text === "string") {
+      answer = data.output_text;
+    }
 
+    if (!answer && Array.isArray(data.output)) {
+      for (const item of data.output) {
+        if (
+          item &&
+          typeof item.text === "string"
+        ) {
+          answer += item.text;
+        }
+
+        if (
+          item &&
+          Array.isArray(item.content)
+        ) {
+          for (const content of item.content) {
+            if (
+              content &&
+              typeof content.text === "string"
+            ) {
+              answer += content.text;
+            }
+          }
+        }
+      }
+    }
+
+    answer = answer.trim();
 
     if (!answer) {
-
       console.error(
         "Gemini returned empty answer:",
         JSON.stringify(data)
@@ -584,11 +589,14 @@ async function askGemini(
       return null;
     }
 
+    console.log(
+      "Gemini success. Search enabled:",
+      true
+    );
 
     return answer;
 
   } catch (error) {
-
     console.error(
       "Gemini exception:",
       error
