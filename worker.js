@@ -536,14 +536,18 @@ ${forceSearch
 
     const data = await response.json();
 
-    if (!response.ok) {
-      console.error(
-        "Gemini error:",
-        JSON.stringify(data)
-      );
+  if (!response.ok) {
+  console.error(
+    "GEMINI SEARCH ERROR:",
+    JSON.stringify({
+      status: response.status,
+      statusText: response.statusText,
+      data
+    })
+  );
 
-      return null;
-    }
+  return null;
+}
 
     // Новый Interactions API возвращает output.
     // Берём текстовый результат.
