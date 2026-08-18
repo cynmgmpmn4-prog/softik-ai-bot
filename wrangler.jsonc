@@ -1,5 +1,11 @@
 {
   "name": "softikaibot",
   "main": "worker.js",
-  "compatibility_date": "2026-08-15"
+  "compatibility_date": "2026-08-18",
+  "kv_namespaces": [
+    {
+      "binding": "SOFTIK_MEMORY",
+      "id": "261322a824274c9abcc0c877e68e2ef3"
+    }
+  ]
 }
