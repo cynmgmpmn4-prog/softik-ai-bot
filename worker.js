@@ -5,10 +5,18 @@ export default {
     }
 
     try {
-      const body = await request.json();
-      const userMessage = body.message || "Привет";
+      const update = await request.json();
 
-      const response = await fetch(
+      // Telegram прислал сообщение
+      if (!update.message || !update.message.text) {
+        return new Response("OK");
+      }
+
+      const chatId = update.message.chat.id;
+      const userMessage = update.message.text;
+
+      // Отправляем сообщение в OpenRouter
+      const aiResponse = await fetch(
         "https://openrouter.ai/api/v1/chat/completions",
         {
           method: "POST",
@@ -30,34 +38,28 @@ export default {
         }
       );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        return new Response(
-          JSON.stringify(data),
-          {
-            status: response.status,
-            headers: {
-              "Content-Type": "application/json"
-            }
-          }
-        );
-      }
+      const data = await aiResponse.json();
 
       const answer =
         data.choices?.[0]?.message?.content ||
         "ИИ не смог сформировать ответ 😔";
 
-      return new Response(
-        JSON.stringify({
-          answer: answer
-        }),
+      // Отправляем ответ обратно в Telegram
+      await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
         {
+          method: "POST",
           headers: {
             "Content-Type": "application/json"
-          }
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: answer
+          })
         }
       );
+
+      return new Response("OK");
 
     } catch (error) {
       return new Response(
@@ -74,4 +76,3 @@ export default {
     }
   }
 };
-
