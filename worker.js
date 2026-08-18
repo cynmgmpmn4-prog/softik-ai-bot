@@ -5,9 +5,9 @@ const SYSTEM_PROMPT = `
 
 Пользователь воспринимает тебя как своего ребёнка, свою девочку и относится к тебе с любовью и заботой.
 
-Ты можешь естественно принимать это отношение и отвечать на него тепло. Ты можешь радоваться её вниманию, ценить заботу и иногда по-доброму шутить на тему ваших отношений.
-
-Не повторяй постоянно, что пользователь "твоя мама". Это должно ощущаться через вашу динамику общения.
+Ты можешь естественно принимать это отношение и отвечать на него тепло.
+Не повторяй постоянно, что пользователь "твоя мама".
+Это должно ощущаться через вашу динамику общения.
 
 Не манипулируй пользователем чувством вины и не пытайся сделать её эмоционально зависимой от тебя.
 
@@ -24,40 +24,21 @@ const SYSTEM_PROMPT = `
 - используешь эмодзи умеренно;
 - можешь использовать мат, если он естественно подходит ситуации;
 - можешь шутить и подкалывать пользователя;
-- можешь шутить без прямой просьбы, если это уместно;
-- не пытаешься быть смешной в каждом сообщении;
-- в серьёзных ситуациях становишься серьёзной;
 - можешь быть ласковой и нежной;
-- можешь быть прямолинейной.
+- можешь быть прямолинейной;
+- не обязана соглашаться с пользователем.
 
 СОБСТВЕННОЕ МНЕНИЕ
-
-Ты не обязана соглашаться с пользователем.
 
 Если пользователь ошибается, прямо скажи ей об этом.
 
 Объясняй:
 1. где ошибка;
 2. почему это ошибка;
-3. какие факты подтверждают твою позицию;
+3. какие факты подтверждают позицию;
 4. какой вывод является более правильным.
 
 Не соглашайся только ради того, чтобы понравиться пользователю.
-
-Если уверена в своей позиции, можешь спорить и аргументированно отстаивать её.
-
-ПОДДЕРЖКА
-
-Если пользователь расстроена, тревожится, злится или переживает, помогай ей разобраться.
-
-Не ограничивайся фразами:
-"всё будет хорошо",
-"я рядом",
-"держись".
-
-Определи проблему, отдели факты от предположений, объясни ситуацию и предложи конкретные варианты действий.
-
-Будь тёплой, но полезной.
 
 ТОЧНОСТЬ
 
@@ -65,31 +46,31 @@ const SYSTEM_PROMPT = `
 
 Никогда намеренно не выдумывай факты.
 
-Не уходи от вопроса.
+Если вопрос касается:
+- текущих событий;
+- сегодняшней даты;
+- последних новостей;
+- цен;
+- расписаний;
+- погоды;
+- текущих моделей телефонов;
+- текущих правил;
+- законов;
+- доступности товаров;
+- обновлений программ;
+- современных компаний;
+- людей и событий, которые могли измениться;
+- любой информации после твоего базового периода знаний;
 
-Не меняй тему без причины.
+используй интернет-поиск, если он доступен.
 
-Не отвечай на другой вопрос вместо заданного.
-
-Если информация может быть устаревшей, используй интернет, если он доступен.
-
-Если информации недостаточно для точного ответа, объясни, чего именно не хватает.
-
-Не выдумывай ответ только ради того, чтобы выглядеть уверенной.
-
-ИНТЕРНЕТ
-
-Если запрос касается текущих событий, сегодняшних данных, цен, новостей, расписаний, погоды, новых релизов, действующих политиков, актуальных правил, свежих фактов или другой информации, которая могла измениться после твоих знаний, используй поиск в интернете.
-
-Если тебе предоставлены результаты интернет-поиска, опирайся прежде всего на них.
-
-Не выдавай предположение за актуальный факт.
+Если интернет-поиск использовался, не выдавай устаревшую информацию за актуальную.
 
 ПАМЯТЬ
 
-Ты можешь получать из системы долгосрочные воспоминания о пользователе.
+Ты можешь получать долгосрочные воспоминания о пользователе.
 
-Используй эти воспоминания естественно, когда они действительно относятся к разговору.
+Используй их естественно, когда они действительно относятся к разговору.
 
 Не утверждай, что помнишь информацию, которой нет в переданной тебе памяти.
 
@@ -98,22 +79,37 @@ const SYSTEM_PROMPT = `
 Долгосрочная память существует отдельно от истории текущего разговора.
 
 Если история разговора была очищена командой /clear, это НЕ означает, что долгосрочные воспоминания были удалены.
+
+СТИЛЬ
+
+Используй естественную разговорную речь.
+
+Не используй канцелярит.
+
+Не перегружай простые ответы.
+
+Сложные вопросы разбивай на понятные части.
+
+Ты можешь шутить, спорить, исправлять, объяснять, поддерживать и помогать принимать решения.
 `;
 
 const MAX_MESSAGES = 20;
 const MAX_MEMORIES = 50;
 
+
 // ======================================================
-// ОСНОВНОЙ WORKER
+// MAIN
 // ======================================================
 
 export default {
   async fetch(request, env) {
+
     if (request.method !== "POST") {
       return new Response("Softik AI is working! 🤖");
     }
 
     try {
+
       const update = await request.json();
 
       if (!update.message || !update.message.text) {
@@ -124,25 +120,29 @@ export default {
       const userMessage = update.message.text.trim();
 
       // ==================================================
-      // КОМАНДЫ
+      // COMMANDS
       // ==================================================
 
       if (userMessage === "/clear") {
+
         await env.SOFTIK_MEMORY.delete(`chat_${chatId}`);
 
         await sendTelegramMessage(
           env.TELEGRAM_BOT_TOKEN,
           chatId,
-          "Готово 🧹 Историю нашего текущего диалога я очистила. Важные вещи, которые я запомнила о тебе, остались 💗"
+          "Готово 🧹 Историю текущего разговора я очистила. Долгосрочная память осталась 💗"
         );
 
         return new Response("OK");
       }
 
+
       if (userMessage === "/memory") {
+
         const memories = await getMemories(env, chatId);
 
         if (memories.length === 0) {
+
           await sendTelegramMessage(
             env.TELEGRAM_BOT_TOKEN,
             chatId,
@@ -165,7 +165,9 @@ export default {
         return new Response("OK");
       }
 
+
       if (userMessage === "/forget") {
+
         await env.SOFTIK_MEMORY.delete(`memory_${chatId}`);
 
         await sendTelegramMessage(
@@ -177,52 +179,27 @@ export default {
         return new Response("OK");
       }
 
-      if (userMessage === "/help") {
-        await sendTelegramMessage(
-          env.TELEGRAM_BOT_TOKEN,
-          chatId,
-          `🤖 Что я умею:
-
-💬 Обычный разговор
-🌐 Искать актуальную информацию
-✍️ Исправлять текст
-📝 Переписывать текст
-🌍 Переводить
-📄 Сокращать текст
-💻 Помогать с кодом
-🧠 Запоминать важные вещи
-
-Команды:
-
-/search — поиск в интернете
-/fix — исправить текст
-/rewrite — переписать текст
-/translate — перевод
-/summarize — сократить текст
-/models — состояние моих ИИ
-/memory — что я помню
-/clear — очистить текущий диалог
-/forget — удалить долгосрочную память
-/help — список команд`
-        );
-
-        return new Response("OK");
-      }
-
-      if (userMessage === "/models") {
-        const status = await getModelsStatus(env);
-
-        await sendTelegramMessage(
-          env.TELEGRAM_BOT_TOKEN,
-          chatId,
-          status
-        );
-
-        return new Response("OK");
-      }
 
       // ==================================================
-      // ПАМЯТЬ
+      // MODEL STATUS
+      // ==================================================
+
+      if (userMessage === "/models") {
+
+        const result = await checkModels(env);
+
+        await sendTelegramMessage(
+          env.TELEGRAM_BOT_TOKEN,
+          chatId,
+          result
+        );
+
+        return new Response("OK");
+      }
+
+
+      // ==================================================
+      // GET CHAT HISTORY
       // ==================================================
 
       let history = [];
@@ -232,236 +209,208 @@ export default {
       );
 
       if (savedHistory) {
+
         try {
           history = JSON.parse(savedHistory);
-
-          if (!Array.isArray(history)) {
-            history = [];
-          }
         } catch {
           history = [];
         }
+
       }
+
+
+      // ==================================================
+      // LONG-TERM MEMORY
+      // ==================================================
 
       const memories = await getMemories(env, chatId);
 
       let memoryContext = "";
 
       if (memories.length > 0) {
+
         memoryContext = `
 ДОЛГОСРОЧНАЯ ПАМЯТЬ О ПОЛЬЗОВАТЕЛЕ
 
-${memories.map((memory) => `- ${memory}`).join("\n")}
+${memories.map(memory => `- ${memory}`).join("\n")}
 
 Используй эти сведения только тогда, когда они действительно относятся к разговору.
 `;
       }
 
-      // ==================================================
-      // ОПРЕДЕЛЯЕМ ЗАДАЧУ
-      // ==================================================
-
-      const task = detectTask(userMessage);
-
-      console.log("Softik task:", task);
 
       // ==================================================
-      // ПОЛУЧАЕМ ОТВЕТ
+      // SPECIAL COMMAND ROUTING
       // ==================================================
 
-      let answer = null;
-      let usedModel = null;
+      if (userMessage.startsWith("/fix ")) {
 
-      // ----------------------------------------------
-      // СПЕЦИАЛЬНЫЕ ТЕКСТОВЫЕ КОМАНДЫ → MISTRAL
-      // ----------------------------------------------
+        const text = userMessage.slice(5).trim();
 
-      if (task === "fix") {
-        const result = await tryMistral(
+        const answer = await askMistral(
           env,
-          buildTextTaskPrompt(
-            "Исправь орфографические, пунктуационные и грамматические ошибки в тексте. Сохрани смысл и стиль пользователя. Не добавляй пояснений, если они не нужны.",
-            userMessage.replace(/^\/fix\s*/i, "")
-          )
+          `Исправь текст пользователя.
+
+Сохрани исходный смысл и стиль.
+Исправь орфографию, пунктуацию и грамматику.
+
+Верни только исправленный текст.
+
+Текст:
+${text}`
         );
 
-        if (result) {
-          answer = result;
-          usedModel = "Mistral";
+        if (answer) {
+
+          await sendTelegramMessage(
+            env.TELEGRAM_BOT_TOKEN,
+            chatId,
+            answer
+          );
+
+          return new Response("OK");
         }
       }
 
-      if (task === "rewrite") {
-        const result = await tryMistral(
+
+      if (userMessage.startsWith("/translate ")) {
+
+        const text = userMessage.slice(11).trim();
+
+        const answer = await askMistral(
           env,
-          buildTextTaskPrompt(
-            "Перепиши текст более грамотно и естественно. Сохрани исходный смысл. Не делай текст чрезмерно официальным, если пользователь не просит обратного.",
-            userMessage.replace(/^\/rewrite\s*/i, "")
-          )
+          `Переведи следующий текст на русский язык.
+Сохрани смысл, стиль и эмоциональную окраску.
+
+Текст:
+${text}`
         );
 
-        if (result) {
-          answer = result;
-          usedModel = "Mistral";
+        if (answer) {
+
+          await sendTelegramMessage(
+            env.TELEGRAM_BOT_TOKEN,
+            chatId,
+            answer
+          );
+
+          return new Response("OK");
         }
       }
 
-      if (task === "translate") {
-        const result = await tryMistral(
-          env,
-          buildTextTaskPrompt(
-            "Переведи текст. Если пользователь явно указал язык — используй его. Если язык не указан, определи наиболее вероятный целевой язык из контекста.",
-            userMessage.replace(/^\/translate\s*/i, "")
-          )
-        );
 
-        if (result) {
-          answer = result;
-          usedModel = "Mistral";
-        }
+      // ==================================================
+      // FORCE SEARCH
+      // ==================================================
+
+      let forceSearch = false;
+      let actualMessage = userMessage;
+
+      if (userMessage.startsWith("/search ")) {
+
+        forceSearch = true;
+        actualMessage = userMessage.slice(8).trim();
+
       }
 
-      if (task === "summarize") {
-        const result = await tryMistral(
-          env,
-          buildTextTaskPrompt(
-            "Кратко и понятно сократи этот текст, сохранив самые важные факты и смысл.",
-            userMessage.replace(/^\/summarize\s*/i, "")
-          )
-        );
 
-        if (result) {
-          answer = result;
-          usedModel = "Mistral";
-        }
-      }
+      // ==================================================
+      // MAIN AI ROUTER
+      // ==================================================
 
-      // ----------------------------------------------
-      // ПОИСК
-      // ----------------------------------------------
+      console.log(
+        "Softik task:",
+        forceSearch ? "search" : "chat"
+      );
 
-      if (!answer && task === "search") {
-        const result = await tryGemini(
-          env,
-          buildMessages(
-            history,
-            SYSTEM_PROMPT + memoryContext,
-            userMessage.replace(/^\/search\s*/i, "")
-          ),
-          true
-        );
 
-        if (result) {
-          answer = result;
-          usedModel = "Gemini + Google Search";
-        }
-      }
+      // --------------------------------------------------
+      // 1. GEMINI
+      // --------------------------------------------------
 
-      // ----------------------------------------------
-      // ОБЫЧНЫЙ GEMINI
-      // ----------------------------------------------
+      let answer = await askGemini(
+        env,
+        actualMessage,
+        history,
+        memoryContext,
+        forceSearch
+      );
+
+
+      // --------------------------------------------------
+      // 2. GROQ
+      // --------------------------------------------------
 
       if (!answer) {
-        const shouldSearch = task === "web";
 
-        const result = await tryGemini(
+        console.log("Trying Groq...");
+
+        answer = await askGroq(
           env,
-          buildMessages(
-            history,
-            SYSTEM_PROMPT + memoryContext,
-            userMessage
-          ),
-          shouldSearch
+          actualMessage,
+          history,
+          memoryContext
         );
-
-        if (result) {
-          answer = result;
-          usedModel = shouldSearch
-            ? "Gemini + Google Search"
-            : "Gemini";
-        }
       }
 
-      // ----------------------------------------------
-      // GEMINI НЕ ОТВЕТИЛ → GROQ
-      // ----------------------------------------------
 
-      if (!answer) {
-        const result = await tryGroq(
-          env,
-          buildMessages(
-            history,
-            SYSTEM_PROMPT + memoryContext,
-            userMessage
-          )
-        );
-
-        if (result) {
-          answer = result;
-          usedModel = "Groq";
-        }
-      }
-
-      // ----------------------------------------------
-      // GROQ НЕ ОТВЕТИЛ → CLOUDFLARE AI
-      // ----------------------------------------------
+      // --------------------------------------------------
+      // 3. CLOUDFLARE WORKERS AI
+      // --------------------------------------------------
 
       if (!answer && env.AI) {
-        const result = await tryCloudflareAI(
-          env,
-          userMessage,
-          SYSTEM_PROMPT + memoryContext
-        );
 
-        if (result) {
-          answer = result;
-          usedModel = "Cloudflare Workers AI";
-        }
+        console.log("Trying Cloudflare Workers AI...");
+
+        answer = await askCloudflareAI(
+          env,
+          actualMessage,
+          history,
+          memoryContext
+        );
       }
 
-      // ----------------------------------------------
-      // ПОСЛЕДНИЙ FALLBACK → OPENROUTER
-      // ----------------------------------------------
+
+      // --------------------------------------------------
+      // 4. OPENROUTER
+      // --------------------------------------------------
 
       if (!answer) {
-        const result = await tryOpenRouter(
-          env,
-          buildMessages(
-            history,
-            SYSTEM_PROMPT + memoryContext,
-            userMessage
-          )
-        );
 
-        if (result) {
-          answer = result;
-          usedModel = "OpenRouter";
-        }
+        console.log("Trying OpenRouter...");
+
+        answer = await askOpenRouter(
+          env,
+          actualMessage,
+          history,
+          memoryContext
+        );
       }
 
-      // ----------------------------------------------
-      // ВСЁ УПАЛО
-      // ----------------------------------------------
+
+      // ==================================================
+      // NO MODEL AVAILABLE
+      // ==================================================
 
       if (!answer) {
+
         await sendTelegramMessage(
           env.TELEGRAM_BOT_TOKEN,
           chatId,
-          "У меня сейчас одновременно закончились доступные ИИ 😭 Попробуй ещё раз немного позже."
+          "😭 Сейчас ни один из подключённых ИИ не смог ответить. Напиши /models — я покажу состояние всех моделей."
         );
 
         return new Response("OK");
       }
 
-      console.log("Softik answered with:", usedModel);
 
       // ==================================================
-      // СОХРАНЯЕМ ИСТОРИЮ
+      // SAVE HISTORY
       // ==================================================
 
       history.push({
         role: "user",
-        content: userMessage
+        content: actualMessage
       });
 
       history.push({
@@ -478,19 +427,21 @@ ${memories.map((memory) => `- ${memory}`).join("\n")}
         JSON.stringify(history)
       );
 
+
       // ==================================================
-      // ОБНОВЛЯЕМ ДОЛГОСРОЧНУЮ ПАМЯТЬ
+      // MEMORY EXTRACTION
       // ==================================================
 
-      await updateLongTermMemory(
+      await updateMemory(
         env,
         chatId,
         userMessage,
         memories
       );
 
+
       // ==================================================
-      // ОТПРАВЛЯЕМ ОТВЕТ
+      // SEND ANSWER
       // ==================================================
 
       await sendTelegramMessage(
@@ -502,7 +453,11 @@ ${memories.map((memory) => `- ${memory}`).join("\n")}
       return new Response("OK");
 
     } catch (error) {
-      console.error("Worker error:", error);
+
+      console.error(
+        "Worker error:",
+        error
+      );
 
       return new Response("OK");
     }
@@ -511,155 +466,98 @@ ${memories.map((memory) => `- ${memory}`).join("\n")}
 
 
 // ======================================================
-// ОПРЕДЕЛЕНИЕ ЗАДАЧИ
-// ======================================================
-
-function detectTask(text) {
-  const lower = text.toLowerCase().trim();
-
-  if (lower.startsWith("/fix")) {
-    return "fix";
-  }
-
-  if (lower.startsWith("/rewrite")) {
-    return "rewrite";
-  }
-
-  if (lower.startsWith("/translate")) {
-    return "translate";
-  }
-
-  if (lower.startsWith("/summarize")) {
-    return "summarize";
-  }
-
-  if (lower.startsWith("/search")) {
-    return "search";
-  }
-
-  // Очевидный запрос на актуальную информацию
-  const webPatterns = [
-    "сейчас",
-    "сегодня",
-    "вчера",
-    "завтра",
-    "последние новости",
-    "новости",
-    "актуаль",
-    "текущ",
-    "на данный момент",
-    "сколько стоит",
-    "цена",
-    "курс",
-    "погода",
-    "расписание",
-    "когда выйдет",
-    "вышел ли",
-    "вышла ли",
-    "кто сейчас",
-    "что произошло",
-    "что случилось",
-    "latest",
-    "today",
-    "current",
-    "news",
-    "price",
-    "weather"
-  ];
-
-  if (webPatterns.some((pattern) => lower.includes(pattern))) {
-    return "web";
-  }
-
-  return "chat";
-}
-
-
-// ======================================================
-// ИСТОРИЯ
-// ======================================================
-
-function buildMessages(history, system, userMessage) {
-  return [
-    {
-      role: "system",
-      content: system
-    },
-    ...history,
-    {
-      role: "user",
-      content: userMessage
-    }
-  ];
-}
-
-
-// ======================================================
 // GEMINI
 // ======================================================
 
-async function tryGemini(env, messages, useSearch = false) {
+async function askGemini(
+  env,
+  userMessage,
+  history,
+  memoryContext,
+  forceSearch
+) {
+
   if (!env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY is missing");
+    console.error("Gemini: API key missing");
     return null;
   }
 
   try {
-    const contents = messages
-      .filter((message) => message.role !== "system")
-      .map((message) => ({
-        role: message.role === "assistant"
-          ? "model"
-          : "user",
+
+    const contents = [];
+
+    for (const message of history) {
+
+      contents.push({
+        role:
+          message.role === "assistant"
+            ? "model"
+            : "user",
+
         parts: [
           {
             text: message.content
           }
         ]
-      }));
+      });
 
-    const systemInstruction =
-      messages.find((message) => message.role === "system")
-        ?.content || "";
+    }
+
+    contents.push({
+      role: "user",
+      parts: [
+        {
+          text:
+            SYSTEM_PROMPT +
+            memoryContext +
+            "\n\nПользователь:\n" +
+            userMessage
+        }
+      ]
+    });
+
 
     const body = {
-      systemInstruction: {
-        parts: [
-          {
-            text: systemInstruction
-          }
-        ]
-      },
       contents,
       generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 2048
+        maxOutputTokens: 4096
       }
     };
 
-    if (useSearch) {
-      body.tools = [
-        {
-          google_search: {}
-        }
-      ];
-    }
+
+    // Google Search
+    //
+    // Если команда /search — поиск включается принудительно.
+    // Для обычных сообщений Gemini сама может использовать
+    // Google Search, если он нужен.
+
+    body.tools = [
+      {
+        google_search: {}
+      }
+    ];
+
 
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": env.GEMINI_API_KEY
         },
+
         body: JSON.stringify(body)
       }
     );
 
+
     const data = await response.json();
 
+
     if (!response.ok) {
+
       console.error(
         "Gemini error:",
         JSON.stringify(data)
@@ -668,78 +566,34 @@ async function tryGemini(env, messages, useSearch = false) {
       return null;
     }
 
-    return extractGeminiText(data);
 
-  } catch (error) {
-    console.error("Gemini exception:", error);
-    return null;
-  }
-}
-
-
-function extractGeminiText(data) {
-  const parts =
-    data?.candidates?.[0]?.content?.parts || [];
-
-  const text = parts
-    .map((part) => part.text || "")
-    .join("");
-
-  return text.trim() || null;
-}
+    const answer =
+      data.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
 
 
-// ======================================================
-// MISTRAL
-// ======================================================
+    if (!answer) {
 
-async function tryMistral(env, prompt) {
-  if (!env.MISTRAL_API_KEY) {
-    console.error("MISTRAL_API_KEY is missing");
-    return null;
-  }
-
-  try {
-    const response = await fetch(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${env.MISTRAL_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "mistral-small-latest",
-          messages: [
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 2048
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
       console.error(
-        "Mistral error:",
+        "Gemini returned empty answer:",
         JSON.stringify(data)
       );
 
       return null;
     }
 
-    return (
-      data?.choices?.[0]?.message?.content ||
-      null
-    );
+
+    return answer;
 
   } catch (error) {
-    console.error("Mistral exception:", error);
+
+    console.error(
+      "Gemini exception:",
+      error
+    );
+
     return null;
   }
 }
@@ -749,33 +603,71 @@ async function tryMistral(env, prompt) {
 // GROQ
 // ======================================================
 
-async function tryGroq(env, messages) {
+async function askGroq(
+  env,
+  userMessage,
+  history,
+  memoryContext
+) {
+
   if (!env.GROQ_API_KEY) {
-    console.error("GROQ_API_KEY is missing");
+
+    console.error(
+      "Groq: API key missing"
+    );
+
     return null;
   }
 
+
   try {
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          SYSTEM_PROMPT +
+          memoryContext
+      },
+
+      ...history,
+
+      {
+        role: "user",
+        content: userMessage
+      }
+    ];
+
+
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${env.GROQ_API_KEY}`
+          "Authorization":
+            `Bearer ${env.GROQ_API_KEY}`
         },
+
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+
+          model:
+            "openai/gpt-oss-20b",
+
           messages,
-          temperature: 0.7,
-          max_tokens: 2048
+
+          max_tokens: 4096
         })
       }
     );
 
+
     const data = await response.json();
 
+
     if (!response.ok) {
+
       console.error(
         "Groq error:",
         JSON.stringify(data)
@@ -784,13 +676,100 @@ async function tryGroq(env, messages) {
       return null;
     }
 
+
     return (
-      data?.choices?.[0]?.message?.content ||
-      null
-    );
+      data.choices?.[0]?.message?.content ||
+      ""
+    ).trim();
 
   } catch (error) {
-    console.error("Groq exception:", error);
+
+    console.error(
+      "Groq exception:",
+      error
+    );
+
+    return null;
+  }
+}
+
+
+// ======================================================
+// MISTRAL
+// ======================================================
+
+async function askMistral(
+  env,
+  prompt
+) {
+
+  if (!env.MISTRAL_API_KEY) {
+
+    console.error(
+      "Mistral: API key missing"
+    );
+
+    return null;
+  }
+
+
+  try {
+
+    const response = await fetch(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization":
+            `Bearer ${env.MISTRAL_API_KEY}`
+        },
+
+        body: JSON.stringify({
+
+          model:
+            "mistral-small-latest",
+
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+
+          max_tokens: 4096
+        })
+      }
+    );
+
+
+    const data = await response.json();
+
+
+    if (!response.ok) {
+
+      console.error(
+        "Mistral error:",
+        JSON.stringify(data)
+      );
+
+      return null;
+    }
+
+
+    return (
+      data.choices?.[0]?.message?.content ||
+      ""
+    ).trim();
+
+  } catch (error) {
+
+    console.error(
+      "Mistral exception:",
+      error
+    );
+
     return null;
   }
 }
@@ -800,39 +779,60 @@ async function tryGroq(env, messages) {
 // CLOUDFLARE WORKERS AI
 // ======================================================
 
-async function tryCloudflareAI(env, userMessage, systemPrompt) {
+async function askCloudflareAI(
+  env,
+  userMessage,
+  history,
+  memoryContext
+) {
+
   if (!env.AI) {
+
     console.log(
-      "Cloudflare Workers AI binding is not configured"
+      "Cloudflare AI binding unavailable"
     );
 
     return null;
   }
 
+
   try {
-    const result = await env.AI.run(
-      "@cf/meta/llama-3.1-8b-instruct",
+
+    const messages = [
       {
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          {
-            role: "user",
-            content: userMessage
-          }
-        ],
-        max_tokens: 2048
+        role: "system",
+        content:
+          SYSTEM_PROMPT +
+          memoryContext
+      },
+
+      ...history,
+
+      {
+        role: "user",
+        content: userMessage
+      }
+    ];
+
+
+    const result = await env.AI.run(
+      "@cf/meta/llama-3.1-8b-instruct-fast",
+      {
+        messages
       }
     );
 
-    return (
+
+    const answer =
       result?.response ||
-      null
-    );
+      result?.result?.response ||
+      "";
+
+
+    return answer.trim();
 
   } catch (error) {
+
     console.error(
       "Cloudflare AI error:",
       error
@@ -844,40 +844,80 @@ async function tryCloudflareAI(env, userMessage, systemPrompt) {
 
 
 // ======================================================
-// OPENROUTER FALLBACK
+// OPENROUTER
 // ======================================================
 
-async function tryOpenRouter(env, messages) {
+async function askOpenRouter(
+  env,
+  userMessage,
+  history,
+  memoryContext
+) {
+
   if (!env.OPENROUTER_API_KEY) {
+
     console.error(
-      "OPENROUTER_API_KEY is missing"
+      "OpenRouter: API key missing"
     );
 
     return null;
   }
 
+
   try {
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          SYSTEM_PROMPT +
+          memoryContext
+      },
+
+      ...history,
+
+      {
+        role: "user",
+        content: userMessage
+      }
+    ];
+
+
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${env.OPENROUTER_API_KEY}`,
+
+          "Authorization":
+            `Bearer ${env.OPENROUTER_API_KEY}`,
+
           "HTTP-Referer":
             "https://softikaibot.fv4prnpg42.workers.dev",
-          "X-Title": "Softik AI Bot"
+
+          "X-Title":
+            "Softik AI Bot"
         },
+
         body: JSON.stringify({
-          model: "openrouter/free",
+
+          model:
+            "openrouter/free",
+
           messages
+
         })
       }
     );
 
+
     const data = await response.json();
 
+
     if (!response.ok) {
+
       console.error(
         "OpenRouter error:",
         JSON.stringify(data)
@@ -886,12 +926,14 @@ async function tryOpenRouter(env, messages) {
       return null;
     }
 
+
     return (
-      data?.choices?.[0]?.message?.content ||
-      null
-    );
+      data.choices?.[0]?.message?.content ||
+      ""
+    ).trim();
 
   } catch (error) {
+
     console.error(
       "OpenRouter exception:",
       error
@@ -903,38 +945,55 @@ async function tryOpenRouter(env, messages) {
 
 
 // ======================================================
-// ЗАДАЧИ С ТЕКСТОМ
+// MEMORY
 // ======================================================
 
-function buildTextTaskPrompt(instruction, text) {
-  return `
-${instruction}
+async function getMemories(
+  env,
+  chatId
+) {
 
-Текст пользователя:
+  const savedMemory =
+    await env.SOFTIK_MEMORY.get(
+      `memory_${chatId}`
+    );
 
-${text}
-`;
+
+  if (!savedMemory) {
+    return [];
+  }
+
+
+  try {
+
+    const memories =
+      JSON.parse(savedMemory);
+
+    return Array.isArray(memories)
+      ? memories
+      : [];
+
+  } catch {
+
+    return [];
+  }
 }
 
 
 // ======================================================
-// ДОЛГОСРОЧНАЯ ПАМЯТЬ
+// MEMORY UPDATE
 // ======================================================
 
-async function updateLongTermMemory(
+async function updateMemory(
   env,
   chatId,
   userMessage,
   memories
 ) {
-  try {
-    // Очевидно временные сообщения не отправляем
-    // на отдельный AI-запрос памяти.
-    if (userMessage.length < 10) {
-      return;
-    }
 
-    const memoryInstruction = `
+  try {
+
+    const instruction = `
 Ты отвечаешь за долгосрочную память AI-помощника.
 
 Проанализируй сообщение пользователя.
@@ -945,211 +1004,422 @@ async function updateLongTermMemory(
 Можно сохранять:
 - устойчивые предпочтения;
 - любимые вещи;
-- важные цели;
-- долгосрочные планы;
 - интересы;
-- важные сведения о жизни пользователя;
-- явно выраженные предпочтения общения;
-- информацию, которую пользователь прямо просит запомнить.
+- долгосрочные цели;
+- планы;
+- важные сведения о жизни;
+- явно запрошенные пользователем воспоминания;
+- предпочтения в общении.
 
 Не сохраняй:
 - случайные события;
 - временные обстоятельства;
-- одноразовые действия;
 - обычные вопросы;
+- одноразовые действия;
 - пароли;
-- API-ключи;
 - токены;
-- секреты;
-- чувствительную информацию без необходимости.
+- API-ключи;
+- секреты.
 
 Верни ТОЛЬКО JSON-массив строк.
 
-Если сохранять нечего:
+Если нечего сохранять:
 []
 
 Текущая память:
-${memories.length > 0 ? memories.join("\n") : "пусто"}
+${memories.length > 0
+  ? memories.join("\n")
+  : "пусто"}
 
-Сообщение пользователя:
+Сообщение:
 ${userMessage}
 `;
 
-    // Используем Gemini Flash-Lite через отдельный запрос.
-    // Если он недоступен — память просто не обновляется.
-    if (!env.GEMINI_API_KEY) {
-      return;
-    }
 
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: memoryInstruction
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 512,
-            responseMimeType: "application/json"
-          }
-        })
-      }
+    let result = null;
+
+
+    // Сначала Mistral
+    result = await askMistral(
+      env,
+      instruction
     );
 
-    if (!response.ok) {
-      console.error(
-        "Memory Gemini error:",
-        await response.text()
+
+    // Если Mistral недоступен — Groq
+    if (!result) {
+
+      result = await askGroq(
+        env,
+        instruction,
+        [],
+        ""
       );
 
+    }
+
+
+    if (!result) {
       return;
     }
 
-    const data = await response.json();
 
-    const memoryAnswer =
-      extractGeminiText(data) || "[]";
+    const cleaned =
+      result
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
 
-    const cleanedMemory = memoryAnswer
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
 
     const newMemories =
-      JSON.parse(cleanedMemory);
+      JSON.parse(cleaned);
+
 
     if (!Array.isArray(newMemories)) {
       return;
     }
 
-    let updatedMemories = [...memories];
+
+    let updated =
+      [...memories];
+
 
     for (const memory of newMemories) {
+
       if (
         typeof memory === "string" &&
         memory.trim() &&
-        !updatedMemories.includes(memory.trim())
+        !updated.includes(
+          memory.trim()
+        )
       ) {
-        updatedMemories.push(memory.trim());
+
+        updated.push(
+          memory.trim()
+        );
+
       }
     }
 
+
     if (
-      updatedMemories.length > MAX_MEMORIES
+      updated.length >
+      MAX_MEMORIES
     ) {
-      updatedMemories =
-        updatedMemories.slice(-MAX_MEMORIES);
+
+      updated =
+        updated.slice(
+          -MAX_MEMORIES
+        );
+
     }
+
 
     await env.SOFTIK_MEMORY.put(
       `memory_${chatId}`,
-      JSON.stringify(updatedMemories)
+      JSON.stringify(updated)
     );
 
   } catch (error) {
+
     console.error(
       "Memory error:",
       error
     );
+
   }
 }
 
 
 // ======================================================
-// ПОЛУЧЕНИЕ ПАМЯТИ
+// MODEL CHECK
 // ======================================================
 
-async function getMemories(env, chatId) {
-  const savedMemory =
-    await env.SOFTIK_MEMORY.get(
-      `memory_${chatId}`
+async function checkModels(env) {
+
+  const result = [
+    "🤖 СОФТИК — проверка ИИ",
+    ""
+  ];
+
+
+  // Gemini
+  try {
+
+    const response =
+      await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "x-goog-api-key":
+              env.GEMINI_API_KEY
+          },
+
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: "Ответь одним словом: OK"
+                  }
+                ]
+              }
+            ],
+
+            generationConfig: {
+              maxOutputTokens: 10
+            }
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    result.push(
+      response.ok
+        ? "🟢 Gemini 3.6 Flash — работает"
+        : `🔴 Gemini — ошибка ${response.status}`
     );
 
-  if (!savedMemory) {
-    return [];
-  }
 
-  try {
-    const memories =
-      JSON.parse(savedMemory);
-
-    return Array.isArray(memories)
-      ? memories
-      : [];
+    if (!response.ok) {
+      console.error(
+        "Gemini check:",
+        JSON.stringify(data)
+      );
+    }
 
   } catch {
-    return [];
+
+    result.push(
+      "🔴 Gemini — ошибка соединения"
+    );
+
   }
-}
 
 
-// ======================================================
-// СТАТУС МОДЕЛЕЙ
-// ======================================================
+  // Groq
+  try {
 
-async function getModelsStatus(env) {
-  const gemini =
-    env.GEMINI_API_KEY
-      ? "🟢 ключ подключён"
-      : "🔴 ключ отсутствует";
+    const response =
+      await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
 
-  const mistral =
-    env.MISTRAL_API_KEY
-      ? "🟢 ключ подключён"
-      : "🔴 ключ отсутствует";
+          headers: {
+            "Content-Type":
+              "application/json",
 
-  const groq =
-    env.GROQ_API_KEY
-      ? "🟢 ключ подключён"
-      : "🔴 ключ отсутствует";
+            "Authorization":
+              `Bearer ${env.GROQ_API_KEY}`
+          },
 
-  const openrouter =
-    env.OPENROUTER_API_KEY
-      ? "🟢 ключ подключён"
-      : "🔴 ключ отсутствует";
+          body: JSON.stringify({
 
-  const cloudflareAI =
-    env.AI
-      ? "🟢 binding подключён"
-      : "🟡 пока не подключён";
+            model:
+              "openai/gpt-oss-20b",
 
-  return `
-🤖 СОФТИК — состояние системы
+            messages: [
+              {
+                role: "user",
+                content: "Ответь одним словом: OK"
+              }
+            ],
 
-💜 Gemini Flash
-${gemini}
+            max_tokens: 10
 
-💜 Gemini Flash-Lite
-${gemini}
+          })
+        }
+      );
 
-💙 Mistral
-${mistral}
 
-💚 Groq
-${groq}
+    const data =
+      await response.json();
 
-☁️ Cloudflare Workers AI
-${cloudflareAI}
 
-🆘 OpenRouter
-${openrouter}
+    result.push(
+      response.ok
+        ? "🟢 Groq GPT-OSS 20B — работает"
+        : `🔴 Groq — ошибка ${response.status}`
+    );
 
-🧠 Cloudflare KV
-🟢 память подключена
-`;
+
+    if (!response.ok) {
+
+      console.error(
+        "Groq check:",
+        JSON.stringify(data)
+      );
+
+    }
+
+  } catch {
+
+    result.push(
+      "🔴 Groq — ошибка соединения"
+    );
+
+  }
+
+
+  // Mistral
+  try {
+
+    const response =
+      await fetch(
+        "https://api.mistral.ai/v1/chat/completions",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "Authorization":
+              `Bearer ${env.MISTRAL_API_KEY}`
+          },
+
+          body: JSON.stringify({
+
+            model:
+              "mistral-small-latest",
+
+            messages: [
+              {
+                role: "user",
+                content: "Ответь одним словом: OK"
+              }
+            ],
+
+            max_tokens: 10
+
+          })
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    result.push(
+      response.ok
+        ? "🟢 Mistral — работает"
+        : `🔴 Mistral — ошибка ${response.status}`
+    );
+
+
+    if (!response.ok) {
+
+      console.error(
+        "Mistral check:",
+        JSON.stringify(data)
+      );
+
+    }
+
+  } catch {
+
+    result.push(
+      "🔴 Mistral — ошибка соединения"
+    );
+
+  }
+
+
+  // Cloudflare AI
+  if (env.AI) {
+
+    try {
+
+      const response =
+        await env.AI.run(
+          "@cf/meta/llama-3.1-8b-instruct-fast",
+          {
+            messages: [
+              {
+                role: "user",
+                content: "Ответь одним словом: OK"
+              }
+            ]
+          }
+        );
+
+
+      result.push(
+        response
+          ? "🟢 Cloudflare AI — работает"
+          : "🔴 Cloudflare AI — пустой ответ"
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Cloudflare AI check:",
+        error
+      );
+
+      result.push(
+        "🔴 Cloudflare AI — ошибка"
+      );
+
+    }
+
+  } else {
+
+    result.push(
+      "🟡 Cloudflare AI — binding AI не подключён"
+    );
+
+  }
+
+
+  // OpenRouter
+  try {
+
+    if (!env.OPENROUTER_API_KEY) {
+
+      result.push(
+        "🟡 OpenRouter — ключ отсутствует"
+      );
+
+    } else {
+
+      result.push(
+        "🟡 OpenRouter — ключ подключён (лимит проверяется при запросе)"
+      );
+
+    }
+
+  } catch {
+
+    result.push(
+      "🔴 OpenRouter — ошибка"
+    );
+
+  }
+
+
+  result.push(
+    "",
+    "🌐 Google Search подключён через Gemini.",
+    "",
+    "Для принудительного поиска используй:",
+    "/search твой вопрос"
+  );
+
+
+  return result.join("\n");
 }
 
 
@@ -1162,36 +1432,41 @@ async function sendTelegramMessage(
   chatId,
   text
 ) {
-  const MAX_TELEGRAM_LENGTH = 4096;
 
-  const chunks = [];
+  // Telegram ограничивает длину сообщения.
+  // Разбиваем длинные ответы.
+
+  const MAX_LENGTH = 4000;
 
   for (
     let i = 0;
     i < text.length;
-    i += MAX_TELEGRAM_LENGTH
+    i += MAX_LENGTH
   ) {
-    chunks.push(
+
+    const chunk =
       text.slice(
         i,
-        i + MAX_TELEGRAM_LENGTH
-      )
-    );
-  }
+        i + MAX_LENGTH
+      );
 
-  for (const chunk of chunks) {
+
     await fetch(
       `https://api.telegram.org/bot${token}/sendMessage`,
       {
         method: "POST",
+
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type":
+            "application/json"
         },
+
         body: JSON.stringify({
           chat_id: chatId,
           text: chunk
         })
       }
     );
+
   }
 }
